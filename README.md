@@ -39,9 +39,8 @@ You can also run the same test in 'manual' mode. For the `testcase_line_easy` ex
 ```
 ./bin/cp1/testcase_line_easy # Note that '-a' is missing
 ```
-You should see output that looks like this: ```[Orchestrator] Started listening on port 9107```. Note the port (it's always 9107) the orchestrator is running on. Next, type the following commands in the other two terminals (one in each):
+You should see output that looks like this: ```[Orchestrator] Started listening on port 9107```. Note the port (it's always 9107) the orchestrator is running on. Next, type the following command in each of the other two terminals:
 ```
-./bin/node 127.0.0.1 9107
 ./bin/node 127.0.0.1 9107
 ```
 The format is as follows: `./node {server_ip} {server_port}` (also see `./bin/node -h`). The `{server_ip}` argument corresponds to the *public* IPv4 address of the machine on which the orchestrator is running; since we are running everything locally, we can simply use the machine's loopback address (127.0.0.1). Please refer to the other test-cases, as well as the test API in [framework/orchestrator.h](framework/orchestrator.h#L174) for more examples and detailed usage.
