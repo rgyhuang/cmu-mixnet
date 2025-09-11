@@ -17,12 +17,40 @@
 #include <stdbool.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-void run_node(void *const handle,
-              volatile bool *const keep_running,
-              const struct mixnet_node_config c);
+    typedef struct node_state
+    {
+
+        /* General Node Fields*/
+
+        mixnet_address node_addr; // Mixnet address of this node
+        uint16_t num_neighbors;   // This node's total neighbor count
+
+        // STP parameters
+        uint32_t root_hello_interval_ms; // Time (in ms) between 'hello' messages
+        uint32_t reelection_interval_ms; // Time (in ms) before starting reelection
+
+        // Routing parameters
+        bool do_random_routing; // Whether this node performs random routing
+        uint16_t mixing_factor; // Exact number of (non-control) packets to mix
+        uint16_t *link_costs;   // Per-neighbor routing costs, in range [0, 2^16)
+
+        /* STP Relevant Fields*/
+        mixnet_address root;     // Current root of the spanning tree
+        uint16_t path_length;    // Path length to the current root
+        mixnet_address next_hop; // Next hop towards the current root
+        bool has_converged;      // Whether STP has converged
+        bool *port_is_blocked;   // Whether a port is blocked
+        bool is_root;            // Whether this node is the root
+
+    } node_state;
+
+    void run_node(void *const handle,
+                  volatile bool *const keep_running,
+                  const struct mixnet_node_config c);
 
 #ifdef __cplusplus
 }

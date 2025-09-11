@@ -65,7 +65,7 @@ CHECK_ALIGNMENT_AND_SIZE(mixnet_packet, 12, 1);
  * Represents the payload for an STP packet.
  */
 typedef struct mixnet_packet_stp {
-    mixnet_address root_address;        // Root of the spanning tree
+    mixnet_address  root_address;        // Root of the spanning tree
     uint16_t path_length;               // Length of path to the root
     mixnet_address node_address;        // Current node's mixnet address
 

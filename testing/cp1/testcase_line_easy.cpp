@@ -16,42 +16,50 @@
  * a single FLOOD packet using the other one as source. We'd expect to
  * see a single FLOOD packet appear on the user output.
  */
-class testcase_line_easy final : public testcase {
+class testcase_line_easy final : public testcase
+{
 public:
-    explicit testcase_line_easy() :
-        testcase("testcase_line_easy") {}
+    explicit testcase_line_easy() : testcase("testcase_line_easy") {}
 
     virtual void pcap(const uint16_t, const mixnet_packet
-                                *const packet) override {
-        if (packet->type == PACKET_TYPE_FLOOD) {
+                                          *const packet) override
+    {
+        if (packet->type == PACKET_TYPE_FLOOD)
+        {
             pcap_count_++;
         }
     }
 
-    virtual void setup() override {
+    virtual void setup() override
+    {
         init_graph(2);
         // Use default mixnet addresses
         graph_->generate_topology(graph::type::LINE);
     }
 
-    virtual error_code run(orchestrator& o) override {
+    virtual error_code run(orchestrator &o) override
+    {
         await_convergence(); // Await STP convergence
 
         // Subscribe to packets from all nodes
-        for (uint16_t i = 0; i < graph_->num_nodes; i++) {
+        for (uint16_t i = 0; i < graph_->num_nodes; i++)
+        {
             DIE_ON_ERROR(o.pcap_change_subscription(i, true));
         }
         DIE_ON_ERROR(o.send_packet(1, 0, PACKET_TYPE_FLOOD));
+
         await_packet_propagation();
         return error_code::NONE;
     }
 
-    virtual void teardown() override {
+    virtual void teardown() override
+    {
         pass_teardown_ = (pcap_count_ == 1);
     }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     testcase_line_easy tc; // Run testcase
     return testcase::run_testcase(tc, argc, argv);
 }
