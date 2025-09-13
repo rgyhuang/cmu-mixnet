@@ -1091,6 +1091,7 @@ namespace framework
         }
         std::cout << "[Orchestrator] Exiting normally" << std::endl;
         testcase_->teardown();
+        std::cout << testcase_->pcap_count_ << std::endl;
         return exit_code;
     }
 

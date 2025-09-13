@@ -15,132 +15,149 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
-void block_ports(uint8_t port, node_state *state)
+void block_ports(node_state *state)
 {
     for (int i = 0; i < state->num_neighbors; i++)
     {
-        if (i == port)
-        {
-            state->port_is_blocked[i] = false;
-        }
-        else
-        {
-            // fprintf(stderr, "Blocking port %d\n", i);
-            state->port_is_blocked[i] = true;
-        }
+        state->port_is_blocked[i] = true;
     }
 }
 
-void run_stp(void *const handle, node_state *state, volatile bool *const keep_running, struct timeval start_time)
+void handle_stp(node_state *state, uint8_t port, mixnet_packet_stp *stp_payload)
 {
-    struct timeval current_time;
-    do
+
+    bool updated = false;
+
+    // Update state based on received STP packet
+    if (stp_payload->root_address < state->root)
     {
+        // New root found
+        state->root = stp_payload->root_address;
+        state->next_hop = stp_payload->node_address;
+        state->path_length = stp_payload->path_length + 1;
+        state->port_is_blocked[port] = false;
 
-        // Only send STP packets if we have updated
-        if (!state->has_updated)
+        updated = true;
+    }
+    else if (stp_payload->root_address == state->root)
+    {
+        // Same root, but shorter path length
+        if (stp_payload->path_length + 1 < state->path_length)
         {
-            // 1. Send STP packet to all neighbors
-            for (int i = 0; i < state->num_neighbors; i++)
-            {
-                mixnet_packet *packet = malloc(sizeof(mixnet_packet) + sizeof(mixnet_packet_stp));
-                packet->total_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_stp);
-                packet->type = PACKET_TYPE_STP;
-
-                mixnet_packet_stp *stp_payload = (mixnet_packet_stp *)packet->payload;
-                stp_payload->root_address = state->root;
-                stp_payload->path_length = state->path_length;
-                stp_payload->node_address = state->node_addr;
-
-                if (mixnet_send(handle, i, packet) < 0)
-                {
-                    // fprintf(stderr, "Error sending STP packet to neighbor %d\n", i);
-                    // exit(1);
-                }
-            }
-        }
-
-        // 2. Receive STP packets from neighbors
-        uint8_t port;
-        mixnet_packet *recv_packet;
-        int recv_count = mixnet_recv(handle, &port, &recv_packet);
-        if (recv_count < 0)
-        {
-            // fprintf(stderr, "Error receiving STP packet\n");
-            // exit(1);
-        }
-        else if (recv_count == 0)
-        {
-            // state->has_converged = true;
-            continue;
-            // break; // No more packets to process
-        }
-        else if (recv_packet->type != PACKET_TYPE_STP)
-        {
-            // fprintf(stderr, "Received non-STP packet in STP handler\n");
-            free(recv_packet);
-            continue;
-        }
-
-        mixnet_packet_stp *stp_payload = (mixnet_packet_stp *)recv_packet->payload;
-
-        bool updated = false;
-
-        // 3. Update state based on received STP packet
-        if (stp_payload->root_address < state->root)
-        {
-            // New root found
-            state->root = stp_payload->root_address;
-            state->next_hop = stp_payload->node_address;
             state->path_length = stp_payload->path_length + 1;
-            // fprintf(stderr, "New root: %d via %d (path length %d)\n", state->root, state->next_hop, state->path_length);
-            // block_ports(port, state);
+            state->next_hop = stp_payload->node_address;
             state->port_is_blocked[port] = false;
 
             updated = true;
         }
-        else if (stp_payload->root_address == state->root)
+        // Same root and same path length, but lower next hop address
+        else if (stp_payload->path_length + 1 == state->path_length)
         {
-            // Same root, but shorter path length
-            if (stp_payload->path_length + 1 < state->path_length)
+            if (stp_payload->node_address < state->next_hop)
             {
-                state->path_length = stp_payload->path_length + 1;
-                // state->port_is_blocked[state->next_hop] = true;
                 state->next_hop = stp_payload->node_address;
-                // fprintf(stderr, "New path to root: %d via %d (path length %d)\n", state->root, state->next_hop, state->path_length);
                 state->port_is_blocked[port] = false;
+
                 updated = true;
             }
-            // Same root and same path length, but lower next hop address
-            else if (stp_payload->path_length + 1 == state->path_length)
+            else
             {
-                if (stp_payload->node_address < state->next_hop)
-                {
-                    state->next_hop = stp_payload->node_address;
-                    updated = true;
-                }
-                state->port_is_blocked[port] = false;
+
+                state->port_is_blocked[port] = true;
             }
         }
-        // else
-        // {
-        //     // block if we know they are not parent but give us lower cost
-        //     if (stp_payload->path_length + 1 <= state->path_length)
-        //     {
-        //         state->port_is_blocked[port] = true;
-        //     }
-        // }
+        else if (stp_payload->path_length == state->path_length + 1)
+        {
+            // potential child
+            state->port_is_blocked[port] = false;
+        }
+        else
+        {
+            state->port_is_blocked[port] = true;
+        }
+    }
 
-        // copy and forward received packet to neighbors
+    state->has_updated = updated;
+}
+
+void send_stp_to_all(void *const handle, node_state *state)
+{
+    for (int i = 0; i < state->num_neighbors; i++)
+    {
+
+        mixnet_packet *packet = malloc(sizeof(mixnet_packet) + sizeof(mixnet_packet_stp));
+        packet->total_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_stp);
+        packet->type = PACKET_TYPE_STP;
+
+        mixnet_packet_stp *payload = (mixnet_packet_stp *)packet->payload;
+        payload->node_address = state->node_addr;
+        payload->root_address = state->root;
+        payload->path_length = state->path_length;
+
+        if (mixnet_send(handle, i, packet) < 0)
+        {
+            fprintf(stderr, "Error sending packet from %d to port %d\n", state->node_addr, i);
+            exit(1);
+        }
+    }
+}
+
+void handle_message(void *const handle, node_state *state, uint8_t port,
+                    mixnet_packet *recv_packet)
+{
+    mixnet_packet_stp *stp_payload;
+    switch (recv_packet->type)
+    {
+    case PACKET_TYPE_STP:
+        stp_payload = (mixnet_packet_stp *)recv_packet->payload;
+
+        // broadcast hello message from parent
+        if (stp_payload->node_address == state->next_hop && stp_payload->path_length + 1 == state->path_length && stp_payload->root_address == state->root)
+        {
+
+            send_stp_to_all(handle, state);
+            state->last_hello_time = clock();
+        }
+        else
+        {
+
+            handle_stp(state, port, stp_payload);
+        }
 
         free(recv_packet);
-        state->has_updated = updated;
-        gettimeofday(&current_time, NULL);
 
-    } while (*keep_running && (current_time.tv_sec - start_time.tv_sec) * 1000 < state->max_convergence_time);
+        break;
+    case PACKET_TYPE_FLOOD:
+        if (state->port_is_blocked[port])
+        {
+            free(recv_packet);
+            break;
+        }
+        for (int i = 0; i <= state->num_neighbors; i++)
+        {
+            if (!state->port_is_blocked[i] && i != port)
+            {
+                // allocate and copy packet
+                mixnet_packet *packet_copy = malloc(recv_packet->total_size);
+                memcpy(packet_copy, recv_packet, recv_packet->total_size);
 
-    state->has_converged = true;
+                if (mixnet_send(handle, i, packet_copy) < 0)
+                {
+                    fprintf(stderr, "Error sending FLOOD packet to neighbor %d\n", i);
+                    exit(1);
+                }
+            }
+        }
+        free(recv_packet);
+
+        break;
+
+    default:
+        // Unknown Packet Type
+        break;
+    }
 }
 
 void run_node(void *const handle,
@@ -153,7 +170,6 @@ void run_node(void *const handle,
 
     // setup node state struct
     node_state *state = malloc(sizeof(node_state));
-    // fprintf(stderr, "Node %d: Starting node with %d neighbors\n", c.node_addr, c.num_neighbors);
     // Copy config values into state
     state->node_addr = c.node_addr;
     state->num_neighbors = c.num_neighbors;
@@ -167,192 +183,83 @@ void run_node(void *const handle,
     state->root = c.node_addr;
     state->path_length = 0;
     state->next_hop = c.node_addr;
-    state->max_convergence_time = 200; // estimate max convergence time
+    state->max_convergence_time = 100; // estimate max convergence time
     state->has_converged = false;
+    state->has_updated = true; // Force initial STP packet send
     state->port_is_blocked = malloc(sizeof(bool) * (c.num_neighbors + 1));
-    gettimeofday(&state->last_hello_time, NULL);
+    block_ports(state); // Initially block all ports
 
-    struct timeval current_time;
+    clock_t current_time = clock();
+    clock_t start_stp_time = clock();
+    state->last_hello_time = clock();
 
     while (*keep_running)
     {
 
-        /* BEGIN STP SECTION */
-        gettimeofday(&current_time, NULL);
-        // Check if it's time to rerun STP
-        // if (state->has_converged && ((current_time.tv_sec - state->last_hello_time.tv_sec) * 1000) > state->reelection_interval_ms)
-        // {
-        //     // fprintf(stderr, "Node %d: Reelection interval reached. Rerunning STP.\n", state->node_addr);
-        //     // gettimeofday(&state->last_hello_time, NULL);
-        //     state->has_converged = false;
-        // }
-
         // Perform STP until convergence
         if (!state->has_converged)
         {
-            // fprintf(stderr, "Node %d: STP has not converged. Running STP.\n", state->node_addr);
-            gettimeofday(&current_time, NULL);
-            run_stp(handle, state, keep_running, current_time);
-            state->is_root = (state->root == state->node_addr);
-            gettimeofday(&state->last_hello_time, NULL);
+            // Only send STP packets if we have updated
+            if (state->has_updated)
+            {
+                // Send STP packet with updated state to all neighbors
+                send_stp_to_all(handle, state);
+                state->has_updated = false;
+            }
+            current_time = clock();
 
-            // if (state->is_root)
-            // {
-            //     for (int i = 0; i < state->num_neighbors; i++)
-            //     {
-            //         if (!state->port_is_blocked[i])
-            //         {
-            //             mixnet_packet *packet = malloc(sizeof(mixnet_packet) + sizeof(mixnet_packet_stp));
-            //             packet->total_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_stp);
-            //             packet->type = PACKET_TYPE_STP;
-
-            //             mixnet_packet_stp *hello_payload = (mixnet_packet_stp *)packet->payload;
-            //             hello_payload->node_address = state->node_addr;
-            //             if (mixnet_send(handle, i, packet) < 0)
-            //             {
-            //                 // fprintf(stderr, "Error sending HELLO packet to neighbor %d\n", i);
-            //                 // exit(1);
-            //             }
-            //         }
-            //     }
-            // }
-
-            // fprintf(stderr, "Node %d: STP has converged. Root: %d, Next Hop: %d, Path Length: %d, Neighbors: %d\n", state->node_addr, state->root, state->next_hop, state->path_length, state->num_neighbors);
-            // // print blocked ports
-            // fprintf(stderr, "Node %d: Blocked Ports: ", state->node_addr);
-            // for (int i = 0; i < state->num_neighbors; i++)
-            // {
-            //     if (state->port_is_blocked[i])
-            //     {
-            //         fprintf(stderr, "%d ", i);
-            //     }
-            // }
-            // fprintf(stderr, "\n ");
-        }
-
-        /* END STP SECTION */
-
-        /* BEGIN HELLO BROADCAST SECTION */
-        gettimeofday(&current_time, NULL);
-        // send hello packet if root
-        if (state->is_root && ((current_time.tv_sec - state->last_hello_time.tv_sec) * 1000) >= state->root_hello_interval_ms)
-        {
-            gettimeofday(&state->last_hello_time, NULL);
-            // fprintf(stderr, "Parent Node %d: Sending HELLO packets to all neighbors.\n", state->node_addr);
-            for (int i = 0; i < state->num_neighbors; i++)
+            if ((current_time - start_stp_time) * 1000 / CLOCKS_PER_SEC > state->max_convergence_time)
             {
 
-                if (!state->port_is_blocked[i])
-                {
-                    mixnet_packet *packet = malloc(sizeof(mixnet_packet) + sizeof(mixnet_packet_stp));
-                    packet->total_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_stp);
-                    packet->type = PACKET_TYPE_STP;
-
-                    mixnet_packet_stp *hello_payload = (mixnet_packet_stp *)packet->payload;
-                    hello_payload->node_address = state->node_addr;
-                    if (mixnet_send(handle, i, packet) < 0)
-                    {
-                        // fprintf(stderr, "Error sending HELLO packet to neighbor %d\n", i);
-                        // exit(1);
-                    }
-                }
+                state->has_converged = true;
+                state->is_root = (state->root == state->node_addr);
             }
+
+            state->last_hello_time = clock();
         }
 
-        /* END HELLO BROADCAST SECTION */
+        current_time = clock();
 
-        /* BEGIN MESSAGE HANDLING SECTION */
+        // send hello packet if root
+        if (state->is_root && ((current_time - state->last_hello_time) * 1000) / CLOCKS_PER_SEC > state->root_hello_interval_ms)
+        {
+            send_stp_to_all(handle, state);
+            state->last_hello_time = clock();
+        }
+        current_time = clock();
 
-        // P1C1: Handle Packet_Type_FLOOD
+        // Check if it's time to rerun STP
+        if (state->has_converged && ((current_time - state->last_hello_time) * 1000.0) / CLOCKS_PER_SEC > state->reelection_interval_ms)
+        {
+            state->root = c.node_addr;
+            state->path_length = 0;
+            state->next_hop = c.node_addr;
+            state->has_updated = true;
+            state->has_converged = false;
+            block_ports(state);
+            start_stp_time = clock();
+        }
+
         uint8_t port;
         mixnet_packet *recv_packet;
         int recv_count = mixnet_recv(handle, &port, &recv_packet);
 
-        // fprintf(stderr, "Node %d: Received packet on port %d\n", state->node_addr, port);
         if (recv_count < 0)
         {
-            // fprintf(stderr, "Error receiving STP packet\n");
-            // exit(1);
+            fprintf(stderr, "Error receiving STP packet\n");
+            exit(1);
         }
         else if (recv_count == 0)
         {
             continue; // No packets to process
         }
 
-        // fprintf(stderr, "Node: %d Isroot: %d \n", state->node_addr, state->root == state->node_addr ? 1 : 0);
-        // fprintf(stderr, "Node %d received packet on port %d with type %d\n", state->node_addr, port, PACKET_TYPE_FLOOD);
-        if (state->port_is_blocked[port])
-        {
-            // Ignore blocked ports
-            // fprintf(stderr, "Node %d: Ignoring packet on blocked port %d\n", state->node_addr, port);
-            free(recv_packet);
-            continue;
-        }
-
-        switch (recv_packet->type)
-        {
-        case PACKET_TYPE_FLOOD:
-            // fprintf(stderr, "Node %d: Received FLOOD packet on port %d. Forwarding to all other neighbors.\n", state->node_addr, port);
-            for (int i = 0; i <= state->num_neighbors; i++)
-            {
-                if (!state->port_is_blocked[i] && i != port)
-                {
-                    // allocate and copy packet
-                    // fprintf(stderr, "Received flood. Node %d forwarding FLOOD packet from port %d to neighbor %d\n", state->node_addr, port, i);
-                    mixnet_packet *packet_copy = malloc(recv_packet->total_size);
-                    memcpy(packet_copy, recv_packet, recv_packet->total_size);
-
-                    if (mixnet_send(handle, i, packet_copy) < 0)
-                    {
-                        // fprintf(stderr, "Error sending FLOOD packet to neighbor %d\n", i);
-                        // exit(1);
-                    }
-                }
-            }
-            free(recv_packet);
-
-            break;
-        case PACKET_TYPE_STP:
-            if (((mixnet_packet_stp *)recv_packet->payload)->node_address == state->next_hop)
-            {
-                gettimeofday(&state->last_hello_time, NULL);
-
-                // fprintf(stderr, "Child Node %d: Received STP packet from parent %d. Sending HELLO packets to all other neighbors.\n", state->node_addr, ((mixnet_packet_stp *)recv_packet->payload)->node_address);
-                for (int i = 0; i < state->num_neighbors; i++)
-                {
-                    if (!state->port_is_blocked[i] && i != port)
-                    {
-                        // allocate and copy packet, update node address
-                        mixnet_packet *packet = malloc(sizeof(mixnet_packet) + sizeof(mixnet_packet_stp));
-                        packet->total_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_stp);
-                        packet->type = PACKET_TYPE_STP;
-
-                        mixnet_packet_stp *hello_payload = (mixnet_packet_stp *)packet->payload;
-                        hello_payload->node_address = state->node_addr;
-
-                        if (mixnet_send(handle, i, packet) < 0)
-                        {
-                            // fprintf(stderr, "Error sending STP packet to neighbor %d\n", i);
-                            // exit(1);
-                        }
-                    }
-                }
-            }
-            free(recv_packet);
-
-            break;
-
-        default:
-            // fprintf(stderr, "Node %d: Received unknown packet type %d on port %d. Ignoring.\n", state->node_addr, recv_packet->type, port);
-            break;
-        }
-
-        /* END MESSAGE HANDLING SECTION */
+        handle_message(handle, state, port, recv_packet);
     }
 
     // Free allocated resources
     free(state->port_is_blocked);
     free(state);
 
-    // 2. Routing
+    // Routing to be implemented...
 }

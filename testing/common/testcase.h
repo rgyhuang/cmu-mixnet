@@ -38,7 +38,7 @@ namespace testing
      */
     class testcase
     {
-    protected:
+    public:
         // Internal state
         bool pass_pcap_ = true;          // Pass pcap checks?
         bool pass_teardown_ = false;     // Pass teardown checks?

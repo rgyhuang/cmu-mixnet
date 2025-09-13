@@ -15,8 +15,8 @@
 #include "config.h"
 
 #include <stdbool.h>
-#include <sys/time.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -41,15 +41,15 @@ extern "C"
         uint16_t *link_costs;   // Per-neighbor routing costs, in range [0, 2^16)
 
         /* STP Relevant Fields*/
-        mixnet_address root;            // Current root of the spanning tree
-        uint16_t path_length;           // Path length to the current root
-        mixnet_address next_hop;        // Next hop towards the current root
-        uint32_t max_convergence_time;  // Time (in ms) taken to converge
-        bool has_converged;             // Whether STP has converged
-        bool has_updated;               // Whether the node state has been updated
-        bool *port_is_blocked;          // Whether a port is blocked
-        bool is_root;                   // Whether this node is the root
-        struct timeval last_hello_time; // Last time a 'hello' message was sent
+        mixnet_address root;        // Current root of the spanning tree
+        uint16_t path_length;       // Path length to the current root
+        mixnet_address next_hop;    // Next hop towards the current root
+        float max_convergence_time; // Time (in ms) taken to converge
+        bool has_converged;         // Whether STP has converged
+        bool has_updated;           // Whether the node state has been updated
+        bool *port_is_blocked;      // Whether a port is blocked
+        bool is_root;               // Whether this node is the root
+        clock_t last_hello_time;    // Last time a 'hello' message was sent
     } node_state;
 
     void run_node(void *const handle,
