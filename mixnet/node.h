@@ -13,6 +13,7 @@
 
 #include "address.h"
 #include "config.h"
+#include "packet.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -23,24 +24,39 @@ extern "C"
 {
 #endif
 
+    /* Using an adjacency list representation for graph topology */
+    typedef struct graph_node
+    {
+        mixnet_address node_addr; // Neighbor node address
+        uint16_t link_cost;       // Cost of the link to this neighbor
+        struct graph_node *next;  // Pointer to the next neighbor
+    } graph_node;
+
+    typedef struct graph
+    {
+        uint16_t num_nodes;     // Total number of nodes
+        graph_node **adj_lists; // Array of adjacency lists
+
+    } graph;
+
     typedef struct node_state
     {
 
-        /* General Node Fields*/
+        /* General Node Fields */
 
         mixnet_address node_addr; // Mixnet address of this node
         uint16_t num_neighbors;   // This node's total neighbor count
 
-        // STP parameters
+        /* STP parameters */
         uint32_t root_hello_interval_ms; // Time (in ms) between 'hello' messages
         uint32_t reelection_interval_ms; // Time (in ms) before starting reelection
 
-        // Routing parameters
+        /* Routing parameters */
         bool do_random_routing; // Whether this node performs random routing
         uint16_t mixing_factor; // Exact number of (non-control) packets to mix
         uint16_t *link_costs;   // Per-neighbor routing costs, in range [0, 2^16)
 
-        /* STP Relevant Fields*/
+        /* STP relevant fields */
         mixnet_address root;        // Current root of the spanning tree
         uint16_t path_length;       // Path length to the current root
         mixnet_address next_hop;    // Next hop towards the current root
@@ -50,8 +66,30 @@ extern "C"
         bool *port_is_blocked;      // Whether a port is blocked
         bool is_root;               // Whether this node is the root
         clock_t last_hello_time;    // Last time a 'hello' message was sent
+
+        /* Routing relevant fields */
+        uint16_t *neighbor_addrs; // Per-neighbor mixnet addresses
+        clock_t last_lsa_time;    // Last time an LSA was sent
+        uint32_t lsa_interval_ms; // Time (in ms) between LSAs
+        graph *topology;          // Network topology
+
     } node_state;
 
+    /* Graph-related functions */
+
+    graph_node *create_node(mixnet_address addr, uint16_t cost);
+    graph *create_graph(node_state *state);
+    void add_edge(graph *g, mixnet_address src, mixnet_address dest, uint16_t cost);
+    void free_graph(graph *g);
+
+    /* Helper functions */
+    void block_ports(node_state *state);
+    void handle_stp(node_state *state, uint8_t port, mixnet_packet_stp *stp_payload);
+    void send_stp_to_all(void *const handle, node_state *state);
+    void handle_message(void *const handle, node_state *state, uint8_t port,
+                        mixnet_packet *recv_packet);
+
+    /* Main node function */
     void run_node(void *const handle,
                   volatile bool *const keep_running,
                   const struct mixnet_node_config c);

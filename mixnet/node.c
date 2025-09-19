@@ -17,6 +17,56 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+/* Graph-related functions */
+graph_node *create_node(mixnet_address addr, uint16_t cost)
+{
+    graph_node *new_node = malloc(sizeof(graph_node));
+    new_node->node_addr = addr;
+    new_node->link_cost = cost;
+    new_node->next = NULL;
+    return new_node;
+}
+graph *create_graph(node_state *state)
+{
+    graph *g = malloc(sizeof(graph));
+    g->num_nodes = state->num_neighbors + 1;
+
+    g->adj_lists = malloc(g->num_nodes * sizeof(graph_node *));
+    for (int i = 0; i < g->num_nodes; i++)
+    {
+        g->adj_lists[i] = NULL;
+    }
+    return g;
+}
+
+void add_edge(graph *g, mixnet_address src, mixnet_address dest, uint16_t cost)
+{
+    graph_node *new_node = create_node(dest, cost);
+    new_node->next = g->adj_lists[src];
+    g->adj_lists[src] = new_node;
+
+    new_node = create_node(src, cost);
+    new_node->next = g->adj_lists[dest];
+    g->adj_lists[dest] = new_node;
+}
+
+void free_graph(graph *g)
+{
+    for (int i = 0; i < g->num_nodes; i++)
+    {
+        graph_node *temp = g->adj_lists[i];
+        while (temp)
+        {
+            graph_node *to_free = temp;
+            temp = temp->next;
+            free(to_free);
+        }
+    }
+    free(g->adj_lists);
+    free(g);
+}
+
+/* Helper functions */
 void block_ports(node_state *state)
 {
     for (int i = 0; i < state->num_neighbors; i++)
@@ -80,6 +130,9 @@ void handle_stp(node_state *state, uint8_t port, mixnet_packet_stp *stp_payload)
     }
 
     state->has_updated = updated;
+
+    // learn neighbor address
+    state->neighbor_addrs[port] = stp_payload->node_address;
 }
 
 void send_stp_to_all(void *const handle, node_state *state)
@@ -104,10 +157,47 @@ void send_stp_to_all(void *const handle, node_state *state)
     }
 }
 
+void send_lsa(void *const handle, node_state *state)
+{
+    size_t lsa_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_lsa) + (sizeof(mixnet_lsa_link_params) * state->num_neighbors);
+    mixnet_packet *packet = malloc(lsa_size);
+    packet->total_size = lsa_size;
+    packet->type = PACKET_TYPE_LSA;
+
+    mixnet_packet_lsa *payload = (mixnet_packet_lsa *)packet->payload;
+    payload->node_address = state->node_addr;
+    payload->neighbor_count = state->num_neighbors;
+
+    mixnet_lsa_link_params *links = (mixnet_lsa_link_params *)(payload + sizeof(mixnet_packet_lsa));
+    for (int i = 0; i < state->num_neighbors; i++)
+    {
+        links[i].neighbor_mixaddr = state->neighbor_addrs[i];
+        links[i].cost = state->link_costs[i];
+    }
+
+    for (int i = 0; i < state->num_neighbors; i++)
+    {
+        if (!state->port_is_blocked[i])
+        {
+            // allocate and copy packet
+            mixnet_packet *packet_copy = malloc(packet->total_size);
+            memcpy(packet_copy, packet, packet->total_size);
+
+            if (mixnet_send(handle, i, packet_copy) < 0)
+            {
+                fprintf(stderr, "Error sending LSA packet to neighbor %d\n", i);
+                exit(1);
+            }
+        }
+    }
+    free(packet);
+}
+
 void handle_message(void *const handle, node_state *state, uint8_t port,
                     mixnet_packet *recv_packet)
 {
     mixnet_packet_stp *stp_payload;
+    // mixnet_packet_lsa *lsa_payload;
     switch (recv_packet->type)
     {
     case PACKET_TYPE_STP:
@@ -153,7 +243,39 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         free(recv_packet);
 
         break;
+    case PACKET_TYPE_LSA:
+        if (state->port_is_blocked[port])
+        {
+            free(recv_packet);
+            break;
+        }
+        // lsa_payload = (mixnet_packet_lsa *)recv_packet->payload;
+        // uint16_t neighbor_count = lsa_payload->neighbor_count;
+        // mixnet_lsa_link_params *lsa_link_ptr = (mixnet_lsa_link_params *)lsa_payload + sizeof(mixnet_packet_lsa);
 
+        // update link state
+        // for (uint16_t i = 0; i < neighbor_count; i++)
+        // {
+        //     mixnet_lsa_link_params link = lsa_link_ptr[i];
+        //     // add to graph if not present
+        // }
+
+        // flood to all unblocked neighbors except sender
+        for (int i = 0; i < state->num_neighbors; i++)
+        {
+            if (!state->port_is_blocked[i] && i != port)
+            {
+                // allocate and copy packet
+                mixnet_packet *packet_copy = malloc(recv_packet->total_size);
+                memcpy(packet_copy, recv_packet, recv_packet->total_size);
+
+                if (mixnet_send(handle, i, packet_copy) < 0)
+                {
+                    fprintf(stderr, "Error sending FLOOD packet to neighbor %d\n", i);
+                    exit(1);
+                }
+            }
+        }
     default:
         // Unknown Packet Type
         break;
@@ -189,9 +311,15 @@ void run_node(void *const handle,
     state->port_is_blocked = malloc(sizeof(bool) * (c.num_neighbors + 1));
     block_ports(state); // Initially block all ports
 
+    // Initialize routing Fields
+    state->topology = create_graph(state);
+    state->neighbor_addrs = malloc(sizeof(mixnet_address) * c.num_neighbors);
+    state->lsa_interval_ms = 300; // send LSA every 300 ms
+
     clock_t current_time = clock();
     clock_t start_stp_time = clock();
     state->last_hello_time = clock();
+    state->last_lsa_time = clock();
 
     while (*keep_running)
     {
@@ -238,6 +366,13 @@ void run_node(void *const handle,
             state->has_converged = false;
             block_ports(state);
             start_stp_time = clock();
+        }
+
+        // check if it's time to send LSA
+        if (state->has_converged && ((current_time - state->last_lsa_time) * 1000.0) / CLOCKS_PER_SEC > state->lsa_interval_ms)
+        {
+            send_lsa(handle, state);
+            state->last_lsa_time = clock();
         }
 
         uint8_t port;
