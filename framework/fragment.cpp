@@ -90,6 +90,7 @@ int fragment::node_context::node_send(
     // Packet size is out-of-bounds
     if ((packet->total_size < MIN_MIXNET_PACKET_SIZE) ||
         (packet->total_size > MAX_MIXNET_PACKET_SIZE)) {
+        std::cout<<packet->total_size <<'\n';
         return -1;
     }
     // Bleach reserved field

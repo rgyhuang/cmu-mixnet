@@ -54,8 +54,7 @@ extern "C"
 
     typedef struct mixing_message
     {
-        const uint8_t port;
-
+        uint8_t port;
         mixnet_packet *packet;
     } mixing_message;
 

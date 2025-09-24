@@ -402,9 +402,15 @@ void reverse_array(mixnet_address arr[], int size)
     }
 }
 
-void add_to_queue(void *const handle, node_state *state, const uint8_t port, mixnet_packet *packet)
+void add_to_queue(void *const handle, node_state *state, uint8_t port, mixnet_packet *packet)
 {
-    state->mixing_queue[state->messages_in_mix_queue] = &((mixing_message){port, packet});
+    mixing_message *message = malloc(sizeof(mixing_message));
+
+    message->port = port;
+    message->packet = packet;
+
+    state->mixing_queue[state->messages_in_mix_queue] = message;
+    // fprintf(stderr, "size: %d\n", packet->total_size);
     state->messages_in_mix_queue++;
     if (state->messages_in_mix_queue == state->mixing_factor)
     {
@@ -414,15 +420,19 @@ void add_to_queue(void *const handle, node_state *state, const uint8_t port, mix
 
 void flush_packets(void *const handle, node_state *state)
 {
-    for (uint16_t i = 0; i < state->messages_in_mix_queue; i++)
+    for (uint16_t i = 0; i < state->mixing_factor; i++)
     {
-        if (mixnet_send(handle, state->mixing_queue[i]->port, state->mixing_queue[i]->packet) < 0)
+
+        mixing_message *curr_packet = state->mixing_queue[i];
+
+        if (mixnet_send(handle, curr_packet->port, curr_packet->packet) < 0)
         {
             fprintf(stderr, "Error sending packet to neighbor %d\n", state->mixing_queue[i]->port);
             exit(1);
         }
+        free(curr_packet);
     }
-    memset(state->mixing_queue, 0, sizeof(mixing_message *) * state->mixing_factor);
+    // memset(state->mixing_queue, 0, sizeof(mixing_message *) * state->mixing_factor);
     state->messages_in_mix_queue = 0; // Reset the queue count after flushing
 }
 
@@ -518,15 +528,15 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         free(recv_packet);
         break;
     case PACKET_TYPE_DATA:
-        fprintf(stderr, "Node %d received DATA packet\n", state->node_addr);
+        // fprintf(stderr, "Node %d received DATA packet\n", state->node_addr);
         data_payload = (mixnet_packet_routing_header *)recv_packet->payload;
 
         // if we are sender, encode path
         if (port == state->num_neighbors)
         {
 
-            if (state->distances == NULL)
-                run_djikstras(state, state->node_addr);
+            // if (state->distances == NULL)
+            run_djikstras(state, state->node_addr);
 
             // packet destined for this node
             uint32_t length;
@@ -623,8 +633,8 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         // if we are sender, encode path
         if (port == state->num_neighbors)
         {
-            if (state->distances == NULL)
-                run_djikstras(state, state->node_addr);
+            // if (state->distances == NULL)
+            run_djikstras(state, state->node_addr);
             // fprintf(stderr, "Handling PING packet from user at node %d to dst %d\n", state->node_addr, data_payload->dst_address);
 
             uint32_t length;

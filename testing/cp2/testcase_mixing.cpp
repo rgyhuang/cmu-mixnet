@@ -36,20 +36,28 @@ public:
             auto rh = reinterpret_cast<const mixnet_packet_routing_header *>(packet->payload());
 
             pass_pcap_ &= (fragment_id >= 4);
+            std::cout << "frag: " << pass_pcap_ << '\n';
+
             pass_pcap_ &= (rh->dst_address ==
                            graph_->get_node(fragment_id).mixaddr());
+            std::cout << "dst: " << pass_pcap_ << '\n';
 
             int src_node_id = graph_->get_node_id(rh->src_address);
             pass_pcap_ &= ((src_node_id != -1) && (src_node_id <= 3));
+            std::cout << "src: " << pass_pcap_ << '\n';
 
             pass_pcap_ &= (received_[fragment_id] < 4);
+            std::cout << "received: " << pass_pcap_ << '\n';
+
             if (pass_pcap_)
             {
                 received_[fragment_id]++;
             }
 
             pass_pcap_ &= check_data(packet, data_);
+            std::cout << "data: " << pass_pcap_ << '\n';
             pcap_count_++;
+            std::cout << "added\n";
         }
         // Unexpected packet type
         else
@@ -113,6 +121,7 @@ public:
 
     virtual void teardown() override
     {
+        std::cout << "pcap: " << pcap_count_ << '\n';
         pass_teardown_ = (pcap_count_ == 12);
     }
 };
