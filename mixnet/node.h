@@ -94,6 +94,8 @@ extern "C"
         djikstra_node **distances;      // Shortest distances to all nodes
         mixing_message **mixing_queue;  // Buffer containing pointers to messages to mix
         uint16_t messages_in_mix_queue; // track number of messages in mixing queue
+        bool reached_mixing;
+
     } node_state;
 
     /* Priority queue related functions */

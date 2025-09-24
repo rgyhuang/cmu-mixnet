@@ -33,6 +33,7 @@ public:
         pass_pcap_ &= expect_packets_;
         if (packet->type == PACKET_TYPE_DATA)
         {
+            std::cout << "here\n";
             auto rh = reinterpret_cast<const mixnet_packet_routing_header *>(packet->payload());
 
             pass_pcap_ &= (fragment_id >= 4);
@@ -62,6 +63,7 @@ public:
         // Unexpected packet type
         else
         {
+            std::cout << "why\n";
             pass_pcap_ = false;
         }
     }

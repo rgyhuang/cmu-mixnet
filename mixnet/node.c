@@ -479,16 +479,18 @@ void reverse_array(mixnet_address arr[], int size)
 void add_to_queue(void *const handle, node_state *state, uint8_t port, mixnet_packet *packet)
 {
     mixing_message *message = malloc(sizeof(mixing_message));
+    mixnet_packet *packet_copy = malloc(packet->total_size);
+    memcpy(packet_copy, packet, packet->total_size);
 
     message->port = port;
-    message->packet = packet;
+    message->packet = packet_copy;
 
     state->mixing_queue[state->messages_in_mix_queue] = message;
     // fprintf(stderr, "size: %d\n", packet->total_size);
     state->messages_in_mix_queue++;
     // fprintf(stderr, "packets after insert: %d vs mixing factor: %d\n", state->messages_in_mix_queue, state->mixing_factor);
-
-    if (state->messages_in_mix_queue >= state->mixing_factor)
+    free(packet);
+    if (state->messages_in_mix_queue == state->mixing_factor)
     {
         flush_packets(handle, state);
     }
@@ -496,7 +498,8 @@ void add_to_queue(void *const handle, node_state *state, uint8_t port, mixnet_pa
 
 void flush_packets(void *const handle, node_state *state)
 {
-    // fprintf(stderr, "packets: %d\n", state->messages_in_mix_queue);
+    // fprintf(stderr, "Sending packets: %d\n", state->messages_in_mix_queue);
+    state->reached_mixing = true;
     for (uint16_t i = 0; i < state->messages_in_mix_queue; i++)
     {
 
@@ -668,12 +671,12 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
                 // fprintf(stderr, "DATA packet reached destination %d\n", state->node_addr);
                 mixnet_packet *packet_copy = malloc(recv_packet->total_size);
                 memcpy(packet_copy, recv_packet, recv_packet->total_size);
-                // add_to_queue(handle, state, state->num_neighbors, packet_copy);
-                if (mixnet_send(handle, state->num_neighbors, packet_copy) < 0)
-                {
-                    fprintf(stderr, "Error sending DATA packet to output port\n");
-                    exit(1);
-                }
+                add_to_queue(handle, state, state->num_neighbors, packet_copy);
+                // if (mixnet_send(handle, state->num_neighbors, packet_copy) < 0)
+                // {
+                //     fprintf(stderr, "Error sending DATA packet to output port\n");
+                //     exit(1);
+                // }
             }
             else
             {
@@ -872,8 +875,7 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         // Unknown Packet Type
         break;
     }
-
-    if (state->messages_in_mix_queue == state->mixing_factor)
+    if (state->reached_mixing)
     {
         flush_packets(handle, state);
     }
@@ -917,6 +919,7 @@ void run_node(void *const handle,
     memset(state->mixing_queue, 0, sizeof(mixing_message *) * state->mixing_factor);
 
     state->messages_in_mix_queue = 0;
+    state->reached_mixing = false;
 
     clock_t current_time = clock();
     clock_t start_stp_time = clock();
