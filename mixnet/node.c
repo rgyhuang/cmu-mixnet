@@ -18,9 +18,9 @@
 #include <unistd.h>
 
 /* Priority queue functions*/
-void swap(djikstra_node *a, djikstra_node *b)
+void swap(djikstra_node **a, djikstra_node **b)
 {
-    djikstra_node temp = *a;
+    djikstra_node *temp = *a;
     *a = *b;
     *b = temp;
 }
@@ -29,15 +29,17 @@ void heapifyUp(priority_queue *pq, int index)
 {
     if (index && pq->nodes[(index - 1) / 2]->distance > pq->nodes[index]->distance)
     {
-        swap(pq->nodes[index], pq->nodes[(index - 1) / 2]);
+        swap(&pq->nodes[index], &pq->nodes[(index - 1) / 2]);
         heapifyUp(pq, (index - 1) / 2);
     }
 }
+
 void push(priority_queue *pq, djikstra_node *value)
 {
     pq->nodes[pq->size++] = value;
     heapifyUp(pq, pq->size - 1);
 }
+
 void heapifyDown(priority_queue *pq, int index)
 {
     int smallest = index;
@@ -50,13 +52,16 @@ void heapifyDown(priority_queue *pq, int index)
         smallest = right;
     if (smallest != index)
     {
-        swap(pq->nodes[index], pq->nodes[smallest]);
+        swap(&pq->nodes[index], &pq->nodes[smallest]);
         heapifyDown(pq, smallest);
     }
 }
 
 djikstra_node *pop(priority_queue *pq)
 {
+    if (pq->size == 0)
+        return NULL;
+
     djikstra_node *item = pq->nodes[0];
     pq->nodes[0] = pq->nodes[--pq->size];
     heapifyDown(pq, 0);
@@ -106,9 +111,9 @@ void add_edge(graph *g, mixnet_address src, mixnet_address dest, uint16_t cost)
     new_node->next = g->adj_lists[src];
     g->adj_lists[src] = new_node;
 
-    new_node = create_node(src, cost);
-    new_node->next = g->adj_lists[dest];
-    g->adj_lists[dest] = new_node;
+    // new_node = create_node(src, cost);
+    // new_node->next = g->adj_lists[dest];
+    // g->adj_lists[dest] = new_node;
     print_graph(g);
 }
 
@@ -146,7 +151,6 @@ void free_graph(graph *g)
     free(g);
 }
 
-/* Djikstra's algorithm */
 void run_djikstras(node_state *state, mixnet_address start_addr)
 {
     fprintf(stderr, "Running Djikstra's from node %d\n", start_addr);
@@ -175,7 +179,7 @@ void run_djikstras(node_state *state, mixnet_address start_addr)
     {
 
         djikstra_node *node = pop(pq);
-        fprintf(stderr, "Visiting node %d with distance %d\n", node->addr, node->distance);
+        // fprintf(stderr, "Visiting node %d with distance %d\n", node->addr, node->distance);
         // Get all adjacent of u.
         for (graph_node *x = state->topology->adj_lists[node->addr]; x != NULL; x = x->next)
         {
@@ -185,9 +189,9 @@ void run_djikstras(node_state *state, mixnet_address start_addr)
 
             uint16_t new_dist = node->distance + weight;
 
-            if (dist[v] == NULL || new_dist < dist[v]->distance)
+            if (dist[v] == NULL || new_dist < dist[v]->distance || (new_dist == dist[v]->distance && node->addr < dist[v]->prev->addr))
             {
-                fprintf(stderr, "Updating distance of node %d to %d\n", v, dist[node->addr]->distance + weight);
+                // fprintf(stderr, "Updating distance of node %d to %d\n", v, dist[node->addr]->distance + weight);
                 if (dist[v] == NULL)
                 {
                     dist[v] = malloc(sizeof(djikstra_node));
@@ -203,14 +207,14 @@ void run_djikstras(node_state *state, mixnet_address start_addr)
     }
 
     state->distances = dist;
-    fprintf(stderr, "Djikstra's complete. Distances:\n");
-    for (uint32_t i = 0; i < state->topology->num_nodes; i++)
-    {
-        if (dist[i] != NULL)
-        {
-            fprintf(stderr, "Node %d: distance %d\n", i, dist[i]->distance);
-        }
-    }
+    // fprintf(stderr, "Djikstra's complete. Distances:\n");
+    // for (uint32_t i = 0; i < state->topology->num_nodes; i++)
+    // {
+    //     if (dist[i] != NULL)
+    //     {
+    //         fprintf(stderr, "Node %d: distance %d\n", i, dist[i]->distance);
+    //     }
+    // }
 }
 
 mixnet_address *find_route(node_state *state, mixnet_address dest, uint32_t *length)
@@ -610,7 +614,7 @@ void run_node(void *const handle,
     state->root = c.node_addr;
     state->path_length = 0;
     state->next_hop = c.node_addr;
-    state->max_convergence_time = 100; // estimate max convergence time
+    state->max_convergence_time = 200; // estimate max convergence time
     state->has_converged = false;
     state->has_updated = true; // Force initial STP packet send
     state->port_is_blocked = malloc(sizeof(bool) * (c.num_neighbors + 1));
@@ -619,7 +623,7 @@ void run_node(void *const handle,
     // Initialize routing Fields
     state->topology = create_graph();
     state->neighbor_addrs = malloc(sizeof(mixnet_address) * c.num_neighbors);
-    state->lsa_interval_ms = 100; // send LSA every 300 ms
+    state->lsa_interval_ms = 50; // send LSA every 300 ms
     bool sent_lsa = false;
 
     clock_t current_time = clock();

@@ -90,7 +90,7 @@ extern "C"
     } node_state;
 
     /* Priority queue related functions */
-    void swap(djikstra_node *a, djikstra_node *b);
+    void swap(djikstra_node **a, djikstra_node **b);
     void heapifyUp(priority_queue *pq, int index);
     void push(priority_queue *pq, djikstra_node *value);
     void heapifyDown(priority_queue *pq, int index);
