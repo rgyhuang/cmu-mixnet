@@ -264,6 +264,80 @@ mixnet_address *find_route(node_state *state, mixnet_address dest, uint32_t *len
     return path;
 }
 
+mixnet_address *find_route_randomized(node_state *state, mixnet_address dest, uint32_t *length)
+{
+
+    // Perform a random DFS to find a route from state->node_addr to dest
+
+    mixnet_address *path = malloc(sizeof(mixnet_address) * state->topology->num_nodes);
+    bool *visited = calloc(state->topology->num_nodes, sizeof(bool));
+    uint32_t path_length = 0;
+
+    mixnet_address current = state->node_addr;
+    visited[current] = true;
+
+    while (current != dest)
+    {
+        graph_node *adj = state->topology->adj_lists[current];
+        graph_node *choices[state->num_neighbors];
+        int choice_count = 0;
+
+        // Collect unvisited neighbors
+        while (adj)
+        {
+            if (!visited[adj->node_addr])
+            {
+                choices[choice_count++] = adj;
+            }
+            adj = adj->next;
+        }
+
+        if (choice_count == 0)
+        {
+            // No unvisited neighbors, backtrack
+            if (path_length == 0)
+            {
+                // No path found
+                free(path);
+                free(visited);
+                *length = 0;
+                return NULL;
+            }
+            current = path[--path_length];
+        }
+        else
+        {
+            // Choose a random unvisited neighbor'
+            int index = rand() % choice_count;
+            graph_node *next = choices[index];
+            // Don't add the starting node
+            if (current != state->node_addr)
+            {
+                path[path_length++] = current;
+            }
+            current = next->node_addr;
+            visited[current] = true;
+        }
+    }
+
+    // Add destination to the path
+
+    free(visited);
+
+    mixnet_address *return_path = malloc(sizeof(mixnet_address) * path_length);
+    memcpy(return_path, path, sizeof(mixnet_address) * path_length);
+
+    // for (uint32_t i = 0; i < path_length; ++i)
+    // {
+    //     fprintf(stderr, "%d ", return_path[i]);
+    // }
+
+    // fprintf(stderr, "\n");
+
+    *length = path_length;
+    return return_path;
+}
+
 /* Helper functions */
 void block_ports(node_state *state)
 {
@@ -412,7 +486,9 @@ void add_to_queue(void *const handle, node_state *state, uint8_t port, mixnet_pa
     state->mixing_queue[state->messages_in_mix_queue] = message;
     // fprintf(stderr, "size: %d\n", packet->total_size);
     state->messages_in_mix_queue++;
-    if (state->messages_in_mix_queue == state->mixing_factor)
+    // fprintf(stderr, "packets after insert: %d vs mixing factor: %d\n", state->messages_in_mix_queue, state->mixing_factor);
+
+    if (state->messages_in_mix_queue >= state->mixing_factor)
     {
         flush_packets(handle, state);
     }
@@ -420,7 +496,8 @@ void add_to_queue(void *const handle, node_state *state, uint8_t port, mixnet_pa
 
 void flush_packets(void *const handle, node_state *state)
 {
-    for (uint16_t i = 0; i < state->mixing_factor; i++)
+    // fprintf(stderr, "packets: %d\n", state->messages_in_mix_queue);
+    for (uint16_t i = 0; i < state->messages_in_mix_queue; i++)
     {
 
         mixing_message *curr_packet = state->mixing_queue[i];
@@ -432,7 +509,7 @@ void flush_packets(void *const handle, node_state *state)
         }
         free(curr_packet);
     }
-    // memset(state->mixing_queue, 0, sizeof(mixing_message *) * state->mixing_factor);
+    memset(state->mixing_queue, 0, sizeof(mixing_message *) * state->mixing_factor);
     state->messages_in_mix_queue = 0; // Reset the queue count after flushing
 }
 
@@ -535,12 +612,16 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         if (port == state->num_neighbors)
         {
 
-            // if (state->distances == NULL)
-            run_djikstras(state, state->node_addr);
+            if (!state->do_random_routing)
+                run_djikstras(state, state->node_addr);
+            if (state->do_random_routing)
+            {
+                fprintf(stderr, "Doing random routing\n");
+            }
 
             // packet destined for this node
             uint32_t length;
-            mixnet_address *path = find_route(state, data_payload->dst_address, &length);
+            mixnet_address *path = (state->do_random_routing) ? find_route_randomized(state, data_payload->dst_address, &length) : find_route(state, data_payload->dst_address, &length);
 
             // create new packet with routing header
             int packet_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_routing_header) + sizeof(mixnet_address) * length + (recv_packet->total_size - sizeof(mixnet_packet) - sizeof(mixnet_packet_routing_header));
@@ -570,7 +651,7 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
                     break;
                 }
             }
-            fprintf(stderr, "Forwarding DATA packet at node %d to next hop %d\n", state->node_addr, path[1]);
+            // fprintf(stderr, "Forwarding DATA packet at node %d to next hop %d\n", state->node_addr, path[1]);
             // if (mixnet_send(handle, next_hop, new_packet) < 0)
             // {
             //     fprintf(stderr, "Error sending DATA packet to output port\n");
@@ -584,19 +665,19 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
             // if we are receiver, forward to output port
             if (data_payload->dst_address == state->node_addr)
             {
-                fprintf(stderr, "DATA packet reached destination %d\n", state->node_addr);
+                // fprintf(stderr, "DATA packet reached destination %d\n", state->node_addr);
                 mixnet_packet *packet_copy = malloc(recv_packet->total_size);
                 memcpy(packet_copy, recv_packet, recv_packet->total_size);
-                add_to_queue(handle, state, state->num_neighbors, packet_copy);
-                // if (mixnet_send(handle, state->num_neighbors, packet_copy) < 0)
-                // {
-                //     fprintf(stderr, "Error sending DATA packet to output port\n");
-                //     exit(1);
-                // }
+                // add_to_queue(handle, state, state->num_neighbors, packet_copy);
+                if (mixnet_send(handle, state->num_neighbors, packet_copy) < 0)
+                {
+                    fprintf(stderr, "Error sending DATA packet to output port\n");
+                    exit(1);
+                }
             }
             else
             {
-                fprintf(stderr, "Forwarding DATA packet at node %d to dst %d\n", state->node_addr, data_payload->dst_address);
+                // fprintf(stderr, "Forwarding DATA packet at node %d to dst %d\n", state->node_addr, data_payload->dst_address);
                 int next_hop = 0;
                 for (int i = 0; i < state->num_neighbors; i++)
                 {
@@ -634,11 +715,13 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         if (port == state->num_neighbors)
         {
             // if (state->distances == NULL)
-            run_djikstras(state, state->node_addr);
+            if (!state->do_random_routing)
+
+                run_djikstras(state, state->node_addr);
             // fprintf(stderr, "Handling PING packet from user at node %d to dst %d\n", state->node_addr, data_payload->dst_address);
 
             uint32_t length;
-            mixnet_address *path = find_route(state, ping_payload->dst_address, &length);
+            mixnet_address *path = (state->do_random_routing) ? find_route_randomized(state, ping_payload->dst_address, &length) : find_route(state, ping_payload->dst_address, &length);
 
             // create new packet with routing header
             int packet_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_routing_header) + sizeof(mixnet_address) * length + sizeof(mixnet_packet_ping);
@@ -921,7 +1004,6 @@ void run_node(void *const handle,
 
         handle_message(handle, state, port, recv_packet);
     }
-
     // Free allocated resources
     free_graph(state->topology);
     free(state->neighbor_addrs);

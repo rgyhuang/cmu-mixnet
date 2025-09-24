@@ -103,6 +103,7 @@ extern "C"
     void heapifyDown(priority_queue *pq, int index);
     djikstra_node *pop(priority_queue *pq);
     mixnet_address *find_route(node_state *state, mixnet_address dest, uint32_t *length);
+    mixnet_address *find_route_randomized(node_state *state, mixnet_address dest, uint32_t *length);
 
     /* Graph-related functions */
     graph_node *create_node(mixnet_address addr, uint16_t cost);
