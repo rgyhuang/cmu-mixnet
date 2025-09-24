@@ -110,6 +110,7 @@ extern "C"
     void send_stp_to_all(void *const handle, node_state *state);
     void handle_message(void *const handle, node_state *state, uint8_t port,
                         mixnet_packet *recv_packet);
+    void reverse_array(mixnet_address arr[], int size);
 
     /* Main node function */
     void run_node(void *const handle,

@@ -85,7 +85,7 @@ namespace testing
         uint64_t pcap_count() const { return pcap_count_; }
         bool is_pass() const
         {
-            std::cout << pcap_count_ << '\n';
+            std::cout << pass_teardown_ << '\n';
             return (pass_pcap_ && pass_teardown_);
         }
         uint32_t root_hello_interval_ms() const { return root_hello_interval_ms_; }

@@ -13,53 +13,65 @@
 /**
  * Exercises ping functionality in a line topology.
  */
-class testcase_ping final : public testcase {
+class testcase_ping final : public testcase
+{
 private:
     std::vector<mixnet_address> expected_route_req_{13, 11, 9, 72, 84, 2};
     std::vector<mixnet_address> expected_route_rsp_{2, 84, 72, 9, 11, 13};
 
 public:
-    explicit testcase_ping() :
-        testcase("testcase_ping") {}
+    explicit testcase_ping() : testcase("testcase_ping") {}
 
     virtual void pcap(
         const uint16_t fragment_id,
-        const mixnet_packet *const packet) override {
+        const mixnet_packet *const packet) override
+    {
 
-        if (packet->type == PACKET_TYPE_PING) {
-            auto rh = reinterpret_cast<const
-                mixnet_packet_routing_header*>(packet->payload());
+        if (packet->type == PACKET_TYPE_PING)
+        {
+            auto rh = reinterpret_cast<const mixnet_packet_routing_header *>(packet->payload());
 
             int src_node_id = graph_->get_node_id(rh->src_address);
-            if (fragment_id == 7) {
+            if (fragment_id == 7)
+            {
                 pass_pcap_ &= (src_node_id == 0);
                 pass_pcap_ &= check_route(rh, expected_route_req_);
             }
-            else if (fragment_id == 0) {
+            else if (fragment_id == 0)
+            {
                 pass_pcap_ &= (src_node_id == 7);
                 pass_pcap_ &= check_route(rh, expected_route_rsp_);
             }
-            else { pass_pcap_ = false; }
+            else
+            {
+                pass_pcap_ = false;
+            }
 
             pass_pcap_ &= (rh->dst_address ==
                            graph_->get_node(fragment_id).mixaddr());
             pcap_count_++;
         }
         // Unexpected packet type
-        else { pass_pcap_ = false; }
+        else
+        {
+            pass_pcap_ = false;
+        }
     }
 
-    virtual void setup() override {
+    virtual void setup() override
+    {
         init_graph(8);
         graph_->generate_topology(graph::type::LINE);
         graph_->set_mixaddrs({15, 13, 11, 9, 72, 84, 2, 42});
     }
 
-    virtual error_code run(orchestrator& o) override {
+    virtual error_code run(orchestrator &o) override
+    {
         await_convergence(); // Await STP convergence
 
         // Subscribe to packets from all nodes
-        for (uint16_t i = 0; i < graph_->num_nodes; i++) {
+        for (uint16_t i = 0; i < graph_->num_nodes; i++)
+        {
             DIE_ON_ERROR(o.pcap_change_subscription(i, true));
         }
         // Send a ping packet
@@ -69,12 +81,15 @@ public:
         return error_code::NONE;
     }
 
-    virtual void teardown() override {
+    virtual void teardown() override
+    {
+        std::cout << "pcaP: " << pcap_count_ << std::endl;
         pass_teardown_ = (pcap_count_ == 2);
     }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     testcase_ping tc; // Run testcase
     return testcase::run_testcase(tc, argc, argv);
 }

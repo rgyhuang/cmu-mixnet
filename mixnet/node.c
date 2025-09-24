@@ -80,7 +80,7 @@ graph_node *create_node(mixnet_address addr, uint16_t cost)
 
 graph *create_graph()
 {
-    fprintf(stderr, "Creating graph\n");
+    // fprintf(stderr, "Creating graph\n");
     graph *g = malloc(sizeof(graph));
     g->num_nodes = UINT16_MAX + 1;
 
@@ -105,7 +105,7 @@ void add_edge(graph *g, mixnet_address src, mixnet_address dest, uint16_t cost)
         }
         temp = temp->next;
     }
-    fprintf(stderr, "Adding edge from %d to %d with cost %d\n", src, dest, cost);
+    // fprintf(stderr, "Adding edge from %d to %d with cost %d\n", src, dest, cost);
 
     graph_node *new_node = create_node(dest, cost);
     new_node->next = g->adj_lists[src];
@@ -114,7 +114,7 @@ void add_edge(graph *g, mixnet_address src, mixnet_address dest, uint16_t cost)
     // new_node = create_node(src, cost);
     // new_node->next = g->adj_lists[dest];
     // g->adj_lists[dest] = new_node;
-    print_graph(g);
+    // print_graph(g);
 }
 
 void print_graph(graph *g)
@@ -153,7 +153,7 @@ void free_graph(graph *g)
 
 void run_djikstras(node_state *state, mixnet_address start_addr)
 {
-    fprintf(stderr, "Running Djikstra's from node %d\n", start_addr);
+    // fprintf(stderr, "Running Djikstra's from node %d\n", start_addr);
 
     // Create a priority queue to store (vertex, distance) pairs
 
@@ -219,26 +219,26 @@ void run_djikstras(node_state *state, mixnet_address start_addr)
 
 mixnet_address *find_route(node_state *state, mixnet_address dest, uint32_t *length)
 {
-    fprintf(stderr, "Finding route from %d to %d\n", state->node_addr, dest);
-    if (state->distances[dest] == NULL)
-    {
-        fprintf(stderr, "No route found to %d\n", dest);
-        // print graph
-        print_graph(state->topology);
-        *length = 0;
-        return NULL;
-    }
+    // fprintf(stderr, "Finding route from %d to %d\n", state->node_addr, dest);
+    // if (state->distances[dest] == NULL)
+    // {
+    //     fprintf(stderr, "No route found to %d\n", dest);
+    //     // print graph
+    //     print_graph(state->topology);
+    //     *length = 0;
+    //     return NULL;
+    // }
     djikstra_node *current = state->distances[dest]->prev;
-    fprintf(stderr, "Current node: %d\n", current->addr);
+    // fprintf(stderr, "Current node: %d\n", current->addr);
     djikstra_node *start = current;
     uint32_t path_length = 0;
     while (start->prev != NULL)
     {
-        fprintf(stderr, "Path node: %d\n", start->addr);
+        // fprintf(stderr, "Path node: %d\n", start->addr);
         path_length++;
         start = start->prev;
     }
-    fprintf(stderr, "Path length: %d\n", path_length);
+    // fprintf(stderr, "Path length: %d\n", path_length);
     // exclude src and dst
 
     mixnet_address *path = malloc(sizeof(mixnet_address) * (path_length));
@@ -253,12 +253,12 @@ mixnet_address *find_route(node_state *state, mixnet_address dest, uint32_t *len
 
     *length = path_length;
 
-    fprintf(stderr, "Route found: ");
-    for (uint32_t j = 0; j < path_length; j++)
-    {
-        fprintf(stderr, "%d ", path[j]);
-    }
-    fprintf(stderr, "\n");
+    // fprintf(stderr, "Route found: ");
+    // for (uint32_t j = 0; j < path_length; j++)
+    // {
+    //     fprintf(stderr, "%d ", path[j]);
+    // }
+    // fprintf(stderr, "\n");
 
     return path;
 }
@@ -391,12 +391,23 @@ void send_lsa(void *const handle, node_state *state)
     free(packet);
 }
 
+void reverse_array(mixnet_address arr[], int size)
+{
+    for (int i = 0; i < size / 2; i++)
+    {
+        int temp = arr[i];
+        arr[i] = arr[size - 1 - i];
+        arr[size - 1 - i] = temp;
+    }
+}
+
 void handle_message(void *const handle, node_state *state, uint8_t port,
                     mixnet_packet *recv_packet)
 {
     mixnet_packet_stp *stp_payload;
     mixnet_packet_lsa *lsa_payload;
     mixnet_packet_routing_header *data_payload;
+    mixnet_packet_routing_header *ping_payload;
     switch (recv_packet->type)
     {
     case PACKET_TYPE_STP:
@@ -489,7 +500,7 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         if (port == state->num_neighbors)
         {
             run_djikstras(state, state->node_addr);
-            fprintf(stderr, "Handling DATA packet from user at node %d to dst %d\n", state->node_addr, data_payload->dst_address);
+            // fprintf(stderr, "Handling DATA packet from user at node %d to dst %d\n", state->node_addr, data_payload->dst_address);
 
             // packet destined for this node
             // run_djikstras(state, state->node_addr);
@@ -508,13 +519,6 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
             new_payload->route_length = length;
             new_payload->hop_index = 0;
             memcpy(new_payload->route, path, sizeof(mixnet_address) * length);
-            // print path
-            fprintf(stderr, "Routing path: ");
-            for (uint32_t i = 0; i < length; i++)
-            {
-                fprintf(stderr, "%d ", path[i]);
-            }
-            fprintf(stderr, "\n");
 
             // copy data
             memcpy((char *)new_payload + sizeof(mixnet_packet_routing_header) + sizeof(mixnet_address) * length,
@@ -531,7 +535,7 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
                     break;
                 }
             }
-            fprintf(stderr, "Forwarding DATA packet at node %d to next hop %d\n", state->node_addr, path[1]);
+            // fprintf(stderr, "Forwarding DATA packet at node %d to next hop %d\n", state->node_addr, path[1]);
             if (mixnet_send(handle, next_hop, new_packet) < 0)
             {
                 fprintf(stderr, "Error sending DATA packet to next hop\n");
@@ -544,7 +548,7 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
             // if we are receiver, forward to output port
             if (data_payload->dst_address == state->node_addr)
             {
-                fprintf(stderr, "DATA packet reached destination %d\n", state->node_addr);
+                // fprintf(stderr, "DATA packet reached destination %d\n", state->node_addr);
                 mixnet_packet *packet_copy = malloc(recv_packet->total_size);
                 memcpy(packet_copy, recv_packet, recv_packet->total_size);
                 if (mixnet_send(handle, state->num_neighbors, packet_copy) < 0)
@@ -585,6 +589,157 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         free(recv_packet);
         break;
 
+    case PACKET_TYPE_PING:
+        // fprintf(stderr, "Node %d received PING packet\n", state->node_addr);
+        ping_payload = (mixnet_packet_routing_header *)recv_packet->payload;
+
+        // if we are sender, encode path
+        if (port == state->num_neighbors)
+        {
+            run_djikstras(state, state->node_addr);
+            // fprintf(stderr, "Handling PING packet from user at node %d to dst %d\n", state->node_addr, data_payload->dst_address);
+
+            uint32_t length;
+            mixnet_address *path = find_route(state, ping_payload->dst_address, &length);
+
+            // create new packet with routing header
+            int packet_size = sizeof(mixnet_packet) + sizeof(mixnet_packet_routing_header) + sizeof(mixnet_address) * length + sizeof(mixnet_packet_ping);
+            mixnet_packet *new_packet = malloc(packet_size);
+            new_packet->total_size = packet_size;
+            new_packet->type = PACKET_TYPE_PING;
+
+            mixnet_packet_routing_header *new_payload = (mixnet_packet_routing_header *)new_packet->payload;
+            new_payload->src_address = ping_payload->src_address;
+            new_payload->dst_address = ping_payload->dst_address;
+            new_payload->route_length = length;
+            new_payload->hop_index = 0;
+            memcpy(new_payload->route, path, sizeof(mixnet_address) * length);
+            // for (int i = 0; i < new_payload->route_length; i++)
+            // {
+            //     fprintf(stderr, "%d ", new_payload->route[i]);
+            // }
+            // fprintf(stderr, "\n");
+
+            mixnet_packet_ping *new_ping_payload = (mixnet_packet_ping *)(new_packet->payload + sizeof(mixnet_packet_routing_header) + sizeof(mixnet_address) * length);
+            // fprintf(stderr, "is request: %d\n", new_ping_payload->is_request);
+
+            // set is_request and send_time
+            new_ping_payload->is_request = true;
+            new_ping_payload->send_time = clock();
+
+            // find port of next hop
+            int next_hop = 0;
+            for (int i = 0; i < state->num_neighbors; i++)
+            {
+                if (state->neighbor_addrs[i] == path[0])
+                {
+                    next_hop = i;
+                    break;
+                }
+            }
+            // fprintf(stderr, "Forwarding PING packet at node %d to next hop %d\n", state->node_addr, path[1]);
+            if (mixnet_send(handle, next_hop, new_packet) < 0)
+            {
+                fprintf(stderr, "Error sending PING packet to next hop\n");
+                exit(1);
+            }
+            // free(path);
+        }
+        else
+        {
+            // if we are receiver, record time and send back
+            if (ping_payload->dst_address == state->node_addr)
+            {
+                // fprintf(stderr, "PING packet reached destination %d\n", state->node_addr);
+
+                mixnet_packet *packet_output = malloc(recv_packet->total_size);
+                memcpy(packet_output, recv_packet, recv_packet->total_size);
+
+                if (mixnet_send(handle, state->num_neighbors, packet_output) < 0)
+                {
+                    fprintf(stderr, "Error sending PING packet to output port\n");
+                    exit(1);
+                }
+                mixnet_packet *packet_copy = malloc(recv_packet->total_size);
+                memcpy(packet_copy, recv_packet, recv_packet->total_size);
+                mixnet_packet_routing_header *new_payload = (mixnet_packet_routing_header *)packet_copy->payload;
+                mixnet_packet_ping *new_ping_payload = (mixnet_packet_ping *)(packet_copy->payload + sizeof(mixnet_packet_routing_header) + sizeof(mixnet_address) * new_payload->route_length);
+                // ping target
+                if (new_ping_payload->is_request)
+                {
+                    // fprintf(stderr, " Time to revers\n");
+                    new_ping_payload->is_request = false;
+
+                    mixnet_address temp = new_payload->src_address;
+                    new_payload->src_address = new_payload->dst_address;
+                    new_payload->dst_address = temp;
+                    new_payload->hop_index = 0;
+                    mixnet_address *arr = malloc(sizeof(mixnet_address) * new_payload->route_length);
+                    memcpy(arr, new_payload->route, sizeof(mixnet_address) * new_payload->route_length);
+                    reverse_array(arr, new_payload->route_length);
+                    memcpy(new_payload->route, arr, sizeof(mixnet_address) * new_payload->route_length);
+
+                    // for (int i = 0; i < new_payload->route_length; i++)
+                    // {
+                    //     fprintf(stderr, "%d ", new_payload->route[i]);
+                    // }
+                    // fprintf(stderr, "\n");
+
+                    // find port of next hop
+                    int next_hop = 0;
+                    for (int i = 0; i < state->num_neighbors; i++)
+                    {
+                        if (state->neighbor_addrs[i] == new_payload->route[new_payload->hop_index])
+                        {
+                            next_hop = i;
+                            break;
+                        }
+                    }
+
+                    if (mixnet_send(handle, next_hop, packet_copy) < 0)
+                    {
+                        fprintf(stderr, "Error sending PING packet on return journey\n");
+                        exit(1);
+                    }
+                }
+                // else
+                // {
+
+                //     // calculate time
+                //     uint32_t time_difference = (clock() - new_ping_payload->send_time) * 1000 / CLOCKS_PER_SEC;
+                //     fprintf(stderr, "Time taken for ping: %d\n", time_difference);
+                // }
+            }
+            else
+            {
+                // fprintf(stderr, "Forwarding PING packet at node %d to dst %d\n", state->node_addr, ping_payload->dst_address);
+                int next_hop = 0;
+                for (int i = 0; i < state->num_neighbors; i++)
+                {
+                    // next hop is destination
+                    if (ping_payload->hop_index >= ping_payload->route_length - 1 && state->neighbor_addrs[i] == ping_payload->dst_address)
+                    {
+                        next_hop = i;
+                        break;
+                    }
+                    else if (state->neighbor_addrs[i] == ping_payload->route[ping_payload->hop_index + 1])
+                    {
+                        next_hop = i;
+                        break;
+                    }
+                }
+                ping_payload->hop_index += 1;
+                mixnet_packet *packet_copy = malloc(recv_packet->total_size);
+                memcpy(packet_copy, recv_packet, recv_packet->total_size);
+                if (mixnet_send(handle, next_hop, packet_copy) < 0)
+                {
+                    fprintf(stderr, "Error sending PING packet on return journey\n");
+                    exit(1);
+                }
+            }
+        }
+        free(recv_packet);
+
     default:
         // Unknown Packet Type
         break;
@@ -614,7 +769,7 @@ void run_node(void *const handle,
     state->root = c.node_addr;
     state->path_length = 0;
     state->next_hop = c.node_addr;
-    state->max_convergence_time = 200; // estimate max convergence time
+    state->max_convergence_time = 100; // estimate max convergence time
     state->has_converged = false;
     state->has_updated = true; // Force initial STP packet send
     state->port_is_blocked = malloc(sizeof(bool) * (c.num_neighbors + 1));
@@ -683,7 +838,7 @@ void run_node(void *const handle,
         {
             if (!sent_lsa)
             {
-                fprintf(stderr, "Node %d sending initial LSA\n", state->node_addr);
+                // fprintf(stderr, "Node %d sending initial LSA\n", state->node_addr);
                 for (int i = 0; i < state->num_neighbors; i++)
                 {
                     add_edge(state->topology, state->node_addr, state->neighbor_addrs[i], state->link_costs[i]); // add self to graph
@@ -718,6 +873,4 @@ void run_node(void *const handle,
     free(state->neighbor_addrs);
     free(state->port_is_blocked);
     free(state);
-
-    // Routing to be implemented...
 }
