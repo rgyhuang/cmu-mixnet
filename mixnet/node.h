@@ -102,6 +102,7 @@ extern "C"
     graph *create_graph();
     void add_edge(graph *g, mixnet_address src, mixnet_address dest, uint16_t cost);
     void free_graph(graph *g);
+    void print_graph(graph *g);
 
     /* Helper functions */
     void block_ports(node_state *state);
