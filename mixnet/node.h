@@ -24,6 +24,19 @@ extern "C"
 {
 #endif
 
+    typedef struct djikstra_node
+    {
+        mixnet_address addr;
+        uint16_t distance;
+        struct djikstra_node *prev;
+    } djikstra_node;
+
+    typedef struct priority_queue
+    {
+        djikstra_node **nodes;
+        uint32_t size;
+    } priority_queue;
+
     /* Using an adjacency list representation for graph topology */
     typedef struct graph_node
     {
@@ -34,7 +47,7 @@ extern "C"
 
     typedef struct graph
     {
-        uint16_t num_nodes;     // Total number of nodes
+        uint32_t num_nodes;     // Total number of nodes
         graph_node **adj_lists; // Array of adjacency lists
 
     } graph;
@@ -68,17 +81,25 @@ extern "C"
         clock_t last_hello_time;    // Last time a 'hello' message was sent
 
         /* Routing relevant fields */
-        uint16_t *neighbor_addrs; // Per-neighbor mixnet addresses
-        clock_t last_lsa_time;    // Last time an LSA was sent
-        uint32_t lsa_interval_ms; // Time (in ms) between LSAs
-        graph *topology;          // Network topology
+        uint16_t *neighbor_addrs;  // Per-neighbor mixnet addresses
+        clock_t last_lsa_time;     // Last time an LSA was sent
+        uint32_t lsa_interval_ms;  // Time (in ms) between LSAs
+        graph *topology;           // Network topology
+        djikstra_node **distances; // Shortest distances to all nodes
 
     } node_state;
 
-    /* Graph-related functions */
+    /* Priority queue related functions */
+    void swap(djikstra_node *a, djikstra_node *b);
+    void heapifyUp(priority_queue *pq, int index);
+    void push(priority_queue *pq, djikstra_node *value);
+    void heapifyDown(priority_queue *pq, int index);
+    djikstra_node *pop(priority_queue *pq);
+    mixnet_address *find_route(node_state *state, mixnet_address dest, uint32_t *length);
 
+    /* Graph-related functions */
     graph_node *create_node(mixnet_address addr, uint16_t cost);
-    graph *create_graph(node_state *state);
+    graph *create_graph();
     void add_edge(graph *g, mixnet_address src, mixnet_address dest, uint16_t cost);
     void free_graph(graph *g);
 
