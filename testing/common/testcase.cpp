@@ -69,6 +69,8 @@ namespace testing
         auto ec = orchestrator.run(tc);
         const bool pass = (tc.is_pass() &&
                            (ec == framework::error_code::NONE));
+        std::cout << "[Testing] is passed: " << tc.is_pass() << std::endl;
+
         // Output result
         std::cout << std::flush
                   << "[Testing] "
@@ -109,6 +111,8 @@ namespace testing
         // Route length differs from expected value, fail early
         if (rh->route_length != expected.size())
         {
+            std::cout << "Route size mismatch" << '\n';
+            std::cout << "Expected: " << expected.size() << ", got: " << rh->route_length << '\n';
             return false;
         }
 
@@ -116,6 +120,8 @@ namespace testing
         {
             if (rh->route()[idx] != expected[idx])
             {
+                std::cout << "Route element " << idx << " mismatch" << '\n';
+                std::cout << "Expected: " << expected[idx] << ", got: " << rh->route()[idx] << '\n';
                 return false;
             }
         }

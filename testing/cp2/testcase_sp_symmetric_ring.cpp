@@ -14,47 +14,63 @@
  * Exercises shortest-path routing of data packets with
  * non-uniform, symmetric link costs in a ring topology.
  */
-class testcase_sp_symmetric_ring final : public testcase {
+class testcase_sp_symmetric_ring final : public testcase
+{
 private:
     std::vector<uint64_t> received_;
     std::vector<mixnet_address> expected_0_{31, 65534, 0};
     std::vector<mixnet_address> expected_1_{65534, 0};
     std::vector<std::string> data_{"Never gonna make you cry",
                                    "Never gonna say goodbye"};
+
 public:
-    explicit testcase_sp_symmetric_ring() :
-        testcase("testcase_sp_symmetric_ring"), received_(2, 0) {}
+    explicit testcase_sp_symmetric_ring() : testcase("testcase_sp_symmetric_ring"), received_(2, 0) {}
 
     virtual void pcap(
         const uint16_t fragment_id,
-        const mixnet_packet *const packet) override {
+        const mixnet_packet *const packet) override
+    {
 
-        if (packet->type == PACKET_TYPE_DATA) {
-            auto rh = reinterpret_cast<const
-                mixnet_packet_routing_header*>(packet->payload());
+        if (packet->type == PACKET_TYPE_DATA)
+        {
+            auto rh = reinterpret_cast<const mixnet_packet_routing_header *>(packet->payload());
 
             pass_pcap_ &= (fragment_id == 4);
             pass_pcap_ &= (rh->dst_address ==
                            graph_->get_node(fragment_id).mixaddr());
+            std::cout << "[Testing] Frag check: " << ((fragment_id == 4) ? "passed" : "failed") << std::endl;
+            std::cout << "[Testing] Dest check: " << ((rh->dst_address == graph_->get_node(fragment_id).mixaddr()) ? "passed" : "failed") << std::endl;
+
+            // std::cout << "[Testing] Received DATA packet from node " << rh->src_address << " to node " << rh->dst_address << std::endl;
 
             int src_node_id = graph_->get_node_id(rh->src_address);
             pass_pcap_ &= ((src_node_id == 0) || (src_node_id == 1));
 
-            pass_pcap_ &= (received_[src_node_id] == 0);
-            if (pass_pcap_) { received_[src_node_id]++; }
+            std::cout << "[Testing] Source node id: " << src_node_id << std::endl;
 
-            pass_pcap_ &= (
-                (src_node_id == 0) ? check_route(rh, expected_0_) :
-                                     check_route(rh, expected_1_));
+            pass_pcap_ &= (received_[src_node_id] == 0);
+            if (pass_pcap_)
+            {
+                received_[src_node_id]++;
+            }
+            std::cout << "[Testing] Route length: " << rh->route_length << std::endl;
+
+            pass_pcap_ &= ((src_node_id == 0) ? check_route(rh, expected_0_) : check_route(rh, expected_1_));
+            std::cout << "[Testing] Length check: " << (((src_node_id == 0) ? check_route(rh, expected_0_) : check_route(rh, expected_1_)) ? "passed" : "failed") << std::endl;
 
             pass_pcap_ &= check_data(packet, data_[src_node_id]);
+            std::cout << "[Testing] Data check: " << (check_data(packet, data_[src_node_id]) ? "passed" : "failed") << std::endl;
             pcap_count_++;
         }
         // Unexpected packet type
-        else { pass_pcap_ = false; }
+        else
+        {
+            pass_pcap_ = false;
+        }
     }
 
-    virtual void setup() override {
+    virtual void setup() override
+    {
         init_graph(7);
         graph_->set_mixaddrs({14, 31, 65534, 0, 81, 21, 42});
 
@@ -63,11 +79,13 @@ public:
         graph_->add_edge(graph::half_edge(0, 3), graph::half_edge(6, 3));
     }
 
-    virtual error_code run(orchestrator& o) override {
+    virtual error_code run(orchestrator &o) override
+    {
         await_convergence(); // Await STP convergence
 
         // Subscribe to packets from all nodes
-        for (uint16_t i = 0; i < graph_->num_nodes; i++) {
+        for (uint16_t i = 0; i < graph_->num_nodes; i++)
+        {
             DIE_ON_ERROR(o.pcap_change_subscription(i, true));
         }
         // Try two nodes as source
@@ -78,12 +96,15 @@ public:
         return error_code::NONE;
     }
 
-    virtual void teardown() override {
+    virtual void teardown() override
+    {
+        fprintf(stderr, "%ld\n", pcap_count_);
         pass_teardown_ = (pcap_count_ == 2);
     }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     testcase_sp_symmetric_ring tc; // Run testcase
     return testcase::run_testcase(tc, argc, argv);
 }

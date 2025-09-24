@@ -14,6 +14,7 @@
 #include "graph.h"
 #include "framework/error.h"
 #include "mixnet/packet.h"
+#include <iostream>
 
 #include <assert.h>
 #include <memory>
@@ -82,7 +83,11 @@ namespace testing
 
         // Accessors
         uint64_t pcap_count() const { return pcap_count_; }
-        bool is_pass() const { return (pass_pcap_ && pass_teardown_); }
+        bool is_pass() const
+        {
+            std::cout << pcap_count_ << '\n';
+            return (pass_pcap_ && pass_teardown_);
+        }
         uint32_t root_hello_interval_ms() const { return root_hello_interval_ms_; }
         uint32_t reelection_interval_ms() const { return reelection_interval_ms_; }
         const graph &get_graph() const
