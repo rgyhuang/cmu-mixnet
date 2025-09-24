@@ -69,8 +69,6 @@ namespace testing
         auto ec = orchestrator.run(tc);
         const bool pass = (tc.is_pass() &&
                            (ec == framework::error_code::NONE));
-        std::cout << "[Testing] is passed: " << tc.is_pass() << std::endl;
-
         // Output result
         std::cout << std::flush
                   << "[Testing] "

@@ -83,10 +83,7 @@ namespace testing
 
         // Accessors
         uint64_t pcap_count() const { return pcap_count_; }
-        bool is_pass() const
-        {
-            std::cout << "is_pass: " << pass_pcap_ << '\n';
-            return (pass_pcap_ && pass_teardown_);
+        bool is_pass() const { return (pass_pcap_ && pass_teardown_);
         }
         uint32_t root_hello_interval_ms() const { return root_hello_interval_ms_; }
         uint32_t reelection_interval_ms() const { return reelection_interval_ms_; }

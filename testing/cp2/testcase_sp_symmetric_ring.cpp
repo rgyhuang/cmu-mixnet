@@ -38,28 +38,21 @@ public:
             pass_pcap_ &= (fragment_id == 4);
             pass_pcap_ &= (rh->dst_address ==
                            graph_->get_node(fragment_id).mixaddr());
-            std::cout << "[Testing] Frag check: " << ((fragment_id == 4) ? "passed" : "failed") << std::endl;
-            std::cout << "[Testing] Dest check: " << ((rh->dst_address == graph_->get_node(fragment_id).mixaddr()) ? "passed" : "failed") << std::endl;
 
             // std::cout << "[Testing] Received DATA packet from node " << rh->src_address << " to node " << rh->dst_address << std::endl;
 
             int src_node_id = graph_->get_node_id(rh->src_address);
             pass_pcap_ &= ((src_node_id == 0) || (src_node_id == 1));
 
-            std::cout << "[Testing] Source node id: " << src_node_id << std::endl;
-
             pass_pcap_ &= (received_[src_node_id] == 0);
             if (pass_pcap_)
             {
                 received_[src_node_id]++;
             }
-            std::cout << "[Testing] Route length: " << rh->route_length << std::endl;
 
             pass_pcap_ &= ((src_node_id == 0) ? check_route(rh, expected_0_) : check_route(rh, expected_1_));
-            std::cout << "[Testing] Length check: " << (((src_node_id == 0) ? check_route(rh, expected_0_) : check_route(rh, expected_1_)) ? "passed" : "failed") << std::endl;
 
             pass_pcap_ &= check_data(packet, data_[src_node_id]);
-            std::cout << "[Testing] Data check: " << (check_data(packet, data_[src_node_id]) ? "passed" : "failed") << std::endl;
             pcap_count_++;
         }
         // Unexpected packet type
@@ -98,7 +91,6 @@ public:
 
     virtual void teardown() override
     {
-        fprintf(stderr, "%ld\n", pcap_count_);
         pass_teardown_ = (pcap_count_ == 2);
     }
 };

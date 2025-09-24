@@ -92,7 +92,6 @@ public:
     virtual void teardown() override
     {
         pass_teardown_ = (pcap_count_ == 100);
-        std::cout << "teardown: " << saw_distinct_routes_ << '\n';
         pass_teardown_ &= saw_distinct_routes_;
     }
 };

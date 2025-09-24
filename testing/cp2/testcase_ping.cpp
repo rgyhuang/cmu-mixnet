@@ -83,7 +83,6 @@ public:
 
     virtual void teardown() override
     {
-        std::cout << "pcaP: " << pcap_count_ << std::endl;
         pass_teardown_ = (pcap_count_ == 2);
     }
 };
