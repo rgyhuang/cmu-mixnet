@@ -844,7 +844,7 @@ void run_node(void *const handle,
     state->root = c.node_addr;
     state->path_length = 0;
     state->next_hop = c.node_addr;
-    state->max_convergence_time = 100; // estimate max convergence time
+    state->max_convergence_time = 75; // estimate max convergence time
     state->has_converged = false;
     state->has_updated = true; // Force initial STP packet send
     state->port_is_blocked = malloc(sizeof(bool) * (c.num_neighbors + 1));
@@ -853,7 +853,7 @@ void run_node(void *const handle,
     // Initialize routing Fields
     state->topology = create_graph();
     state->neighbor_addrs = malloc(sizeof(mixnet_address) * c.num_neighbors);
-    state->lsa_interval_ms = 50; // send LSA every 50 ms
+    state->lsa_interval_ms = 25; // send LSA every 50 ms
     bool sent_lsa = false;
     state->mixing_queue = malloc(sizeof(mixnet_packet *) * state->mixing_factor);
     memset(state->mixing_queue, 0, sizeof(mixing_message *) * state->mixing_factor);
@@ -948,15 +948,6 @@ void run_node(void *const handle,
         handle_message(handle, state, port, recv_packet);
     }
     // Free allocated resources
-
-    for (uint16_t i = 0; i < state->mixing_factor; i++)
-    {
-        if (state->mixing_queue[i])
-        {
-            free(state->mixing_queue[i]->packet);
-            free(state->mixing_queue[i]);
-        }
-    }
     free(state->mixing_queue);
     if (state->distances)
     {
