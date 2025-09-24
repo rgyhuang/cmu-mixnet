@@ -52,6 +52,13 @@ extern "C"
 
     } graph;
 
+    typedef struct mixing_message
+    {
+        const uint8_t port;
+
+        mixnet_packet *packet;
+    } mixing_message;
+
     typedef struct node_state
     {
 
@@ -81,12 +88,13 @@ extern "C"
         clock_t last_hello_time;    // Last time a 'hello' message was sent
 
         /* Routing relevant fields */
-        uint16_t *neighbor_addrs;  // Per-neighbor mixnet addresses
-        clock_t last_lsa_time;     // Last time an LSA was sent
-        uint32_t lsa_interval_ms;  // Time (in ms) between LSAs
-        graph *topology;           // Network topology
-        djikstra_node **distances; // Shortest distances to all nodes
-
+        uint16_t *neighbor_addrs;       // Per-neighbor mixnet addresses
+        clock_t last_lsa_time;          // Last time an LSA was sent
+        uint32_t lsa_interval_ms;       // Time (in ms) between LSAs
+        graph *topology;                // Network topology
+        djikstra_node **distances;      // Shortest distances to all nodes
+        mixing_message **mixing_queue;  // Buffer containing pointers to messages to mix
+        uint16_t messages_in_mix_queue; // track number of messages in mixing queue
     } node_state;
 
     /* Priority queue related functions */
@@ -111,7 +119,8 @@ extern "C"
     void handle_message(void *const handle, node_state *state, uint8_t port,
                         mixnet_packet *recv_packet);
     void reverse_array(mixnet_address arr[], int size);
-
+    void add_to_queue(void *const handle, node_state *state, const uint8_t port, mixnet_packet *packet);
+    void flush_packets(void *const handle, node_state *state);
     /* Main node function */
     void run_node(void *const handle,
                   volatile bool *const keep_running,
