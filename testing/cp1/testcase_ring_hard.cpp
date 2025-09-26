@@ -15,46 +15,71 @@
  * subscribe to packet updates from every node, then send one FLOOD
  * packet using a subset of nodes as src.
  */
-class testcase_ring_hard final : public testcase {
+class testcase_ring_hard final : public testcase
+{
 public:
-    explicit testcase_ring_hard() :
-        testcase("testcase_ring_hard") {}
+    explicit testcase_ring_hard() : testcase("testcase_ring_hard") {}
 
     virtual void pcap(const uint16_t, const mixnet_packet
-                                *const packet) override {
-        if (packet->type == PACKET_TYPE_FLOOD) {
+                                          *const packet) override
+    {
+        if (packet->type == PACKET_TYPE_FLOOD)
+        {
             pcap_count_++;
         }
     }
 
-    virtual void setup() override {
+    virtual void setup() override
+    {
         init_graph(8);
         graph_->generate_topology(graph::type::RING);
         graph_->set_mixaddrs({12, 37, 52, 71, 34, 16, 28, 46});
     }
 
-    virtual error_code run(orchestrator& o) override {
+    virtual error_code run(orchestrator &o) override
+    {
         await_convergence(); // Await STP convergence
 
         // Subscribe to packets from all nodes
-        for (uint16_t i = 0; i < graph_->num_nodes; i++) {
+        for (uint16_t i = 0; i < graph_->num_nodes; i++)
+        {
             DIE_ON_ERROR(o.pcap_change_subscription(i, true));
         }
         // Try every alternate node as source
-        for (uint16_t i = 0; i < graph_->num_nodes; i++) {
-            if ((i % 2) == 1) { continue; }
+        for (uint16_t i = 0; i < graph_->num_nodes; i++)
+        {
+            if ((i % 2) == 1)
+            {
+                continue;
+            }
             DIE_ON_ERROR(o.send_packet(i, 0, PACKET_TYPE_FLOOD));
         }
         await_packet_propagation();
+
+        std::vector<mixnet_address> nodes = {1, 3, 5, 4, 7, 6, 8, 0};
+        for (uint16_t i = 0; i < nodes.size(); i++)
+        {
+            for (uint16_t j = 0; j < nodes.size(); j++)
+            {
+                if (i == j)
+                {
+                    continue;
+                }
+                DIE_ON_ERROR(o.send_packet(i, j, PACKET_TYPE_PING));
+                await_packet_propagation();
+            }
+        }
         return error_code::NONE;
     }
 
-    virtual void teardown() override {
+    virtual void teardown() override
+    {
         pass_teardown_ = (pcap_count_ == (4 * 7));
     }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     testcase_ring_hard tc; // Run testcase
     return testcase::run_testcase(tc, argc, argv);
 }
