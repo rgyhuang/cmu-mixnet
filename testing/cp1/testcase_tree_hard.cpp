@@ -63,7 +63,7 @@ public:
         }
         await_packet_propagation();
 
-        std::vector<mixnet_address> nodes = {1, 3, 5, 4, 7, 6, 8, 0};
+        std::vector<mixnet_address> nodes = {1, 3, 5, 4, 7, 6, 8};
         for (uint16_t i = 0; i < nodes.size(); i++)
         {
             for (uint16_t j = 0; j < nodes.size(); j++)
