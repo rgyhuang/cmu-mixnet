@@ -402,6 +402,10 @@ void handle_stp(node_state *state, uint8_t port, mixnet_packet_stp *stp_payload)
     }
 
     state->has_updated = updated;
+    if (state->has_updated)
+    {
+        state->start_stp_time = clock();
+    }
 
     // learn neighbor address
     state->neighbor_addrs[port] = stp_payload->node_address;
@@ -534,7 +538,7 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
         }
         else
         {
-
+            state->stp_control_messages++;
             handle_stp(state, port, stp_payload);
         }
 
@@ -776,13 +780,13 @@ void handle_message(void *const handle, node_state *state, uint8_t port,
                     add_to_queue(handle, state, next_hop, packet_copy);
                 }
                 // For lab portion
-                // else
-                // {
+                else
+                {
 
-                //     // calculate time
-                //     uint32_t time_difference = (clock() - new_ping_payload->send_time) * 1000 / CLOCKS_PER_SEC;
-                //     fprintf(stderr, "Time taken for ping: %d\n", time_difference);
-                // }
+                    // calculate time
+                    uint32_t time_difference = (clock() - new_ping_payload->send_time) * 1000 / CLOCKS_PER_SEC;
+                    fprintf(stderr, "Time taken for ping: %d ms\n", time_difference);
+                }
             }
             else
             {
@@ -861,8 +865,11 @@ void run_node(void *const handle,
     state->messages_in_mix_queue = 0;
     state->reached_mixing = false;
 
+    state->stp_control_messages = 0;
+
     clock_t current_time = clock();
-    clock_t start_stp_time = clock();
+    state->start_stp_time = clock();
+    clock_t start_time = clock();
     state->last_hello_time = clock();
     state->last_lsa_time = clock();
 
@@ -881,11 +888,13 @@ void run_node(void *const handle,
             }
             current_time = clock();
 
-            if ((current_time - start_stp_time) * 1000 / CLOCKS_PER_SEC > state->max_convergence_time)
+            if ((current_time - state->start_stp_time) * 1000 / CLOCKS_PER_SEC > state->max_convergence_time)
             {
 
                 state->has_converged = true;
                 state->is_root = (state->root == state->node_addr);
+                float conv_time = (current_time - start_time) * 1000 / CLOCKS_PER_SEC;
+                fprintf(stderr, "Convergence time: %f ms || STP messages exchanged: %d\n", conv_time, state->stp_control_messages);
             }
 
             state->last_hello_time = clock();
@@ -910,7 +919,7 @@ void run_node(void *const handle,
             state->has_updated = true;
             state->has_converged = false;
             block_ports(state);
-            start_stp_time = clock();
+            state->start_stp_time = clock();
         }
 
         // check if it's time to send LSA

@@ -96,6 +96,10 @@ extern "C"
         uint16_t messages_in_mix_queue; // track number of messages in mixing queue
         bool reached_mixing;
 
+        /* Lab metrics */
+        uint32_t stp_control_messages;
+        clock_t start_stp_time;
+
     } node_state;
 
     /* Priority queue related functions */
