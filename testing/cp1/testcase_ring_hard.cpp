@@ -66,9 +66,10 @@ public:
                     continue;
                 }
                 DIE_ON_ERROR(o.send_packet(i, j, PACKET_TYPE_PING));
-                // await_packet_propagation();
             }
         }
+                await_packet_propagation();
+
         return error_code::NONE;
     }
 

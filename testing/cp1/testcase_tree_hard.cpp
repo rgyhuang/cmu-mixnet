@@ -15,19 +15,22 @@
  * We subscribe to packet updates from all the nodes, then send a fixed
  * number of FLOOD packets using every node as src.
  */
-class testcase_tree_hard final : public testcase {
+class testcase_tree_hard final : public testcase
+{
 public:
-    explicit testcase_tree_hard() :
-        testcase("testcase_tree_hard") {}
+    explicit testcase_tree_hard() : testcase("testcase_tree_hard") {}
 
     virtual void pcap(const uint16_t, const mixnet_packet
-                                *const packet) override {
-        if (packet->type == PACKET_TYPE_FLOOD) {
+                                          *const packet) override
+    {
+        if (packet->type == PACKET_TYPE_FLOOD)
+        {
             pcap_count_++;
         }
     }
 
-    virtual void setup() override {
+    virtual void setup() override
+    {
         init_graph(7);
         // Level 1
         graph_->add_edge(0, 1);
@@ -41,16 +44,20 @@ public:
         graph_->set_mixaddrs({52, 31, 108, 77, 23, 41, 62});
     }
 
-    virtual error_code run(orchestrator& o) override {
+    virtual error_code run(orchestrator &o) override
+    {
         await_convergence(); // Await STP convergence
 
         // Subscribe to packets from all nodes
-        for (uint16_t i = 0; i < graph_->num_nodes; i++) {
+        for (uint16_t i = 0; i < graph_->num_nodes; i++)
+        {
             DIE_ON_ERROR(o.pcap_change_subscription(i, true));
         }
         // Try every node as source
-        for (uint16_t t = 0; t < 5; t++) {
-            for (uint16_t idx = 0; idx < 7; idx++) {
+        for (uint16_t t = 0; t < 5; t++)
+        {
+            for (uint16_t idx = 0; idx < 7; idx++)
+            {
                 DIE_ON_ERROR(o.send_packet(idx, 0, PACKET_TYPE_FLOOD));
             }
         }
@@ -66,19 +73,22 @@ public:
                     continue;
                 }
                 DIE_ON_ERROR(o.send_packet(i, j, PACKET_TYPE_PING));
-                // await_packet_propagation();
             }
         }
+
+        await_packet_propagation();
 
         return error_code::NONE;
     }
 
-    virtual void teardown() override {
+    virtual void teardown() override
+    {
         pass_teardown_ = (pcap_count_ == (5 * 7 * 6));
     }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     testcase_tree_hard tc; // Run testcase
     return testcase::run_testcase(tc, argc, argv);
 }
